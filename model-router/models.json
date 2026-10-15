@@ -28,6 +28,8 @@
                 "tf"
             ],
             "dir": "~/recipes/qwen38-flash-next-dgx-spark",
+            "repo": "https://github.com/quietvidarr/qwen38-flash-next-dgx-spark",
+            "branch": "local-patches",
             "start": "./local/start.sh",
             "stop": "./local/stop.sh",
             "served_name": "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold",
@@ -57,16 +59,23 @@
                 "35b-tf"
             ],
             "dir": "~/recipes/qwen36-35b-a3b-exl3-tensorfold-dgx-spark",
+            "repo": "https://github.com/quietvidarr/qwen36-35b-a3b-exl3-tensorfold-dgx-spark",
+            "branch": "main",
+            "requires": [
+                "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold"
+            ],
             "start": "./local/start.sh",
             "stop": "./local/stop.sh",
             "served_name": "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold",
             "container": "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold",
             "hf_repo": "yeasah/Qwen3.6-35B-A3B-exl3",
             "hf_branch": "6.00bpw",
+            "weights_install": "./local/download.sh",
             "weights_update": "./local/download.sh --follow",
             "image_cmd": "./local/image.sh ref",
             "image_update": "./local/image.sh update",
             "image_build": true,
+            "prebuild": "./local/prebuild.sh",
             "update_check": "./local/check-update.sh",
             "effort": "budget"
         }
