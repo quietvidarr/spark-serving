@@ -26,7 +26,7 @@ curl -s localhost:8888/v1/chat/completions -H 'Content-Type: application/json' \
 ```
 Recipes go to `~/recipes` (`dir` in `model-router/models.json`). The 35B installs Flash's recipe and image first.
 Switch: name another model (`flash-tf`, `35b-tf`, `any` = whatever is loaded). First start: minutes (kernel compiles).
-Prompt cache: `~/.cache/tensorfold-prompt-cache`, shared. vLLM entries: `models.example-vllm.json`.
+Prompt cache: `~/.cache/tensorfold-prompt-cache`, shared. Elsewhere: `PROMPT_CACHE_DIR=` in `model-router/.env` and each recipe's `.env`. vLLM entries: `models.example-vllm.json`.
 
 Recipes: [qwen38-flash-next-dgx-spark](https://github.com/quietvidarr/qwen38-flash-next-dgx-spark), [qwen36-35b-a3b-exl3-tensorfold-dgx-spark](https://github.com/quietvidarr/qwen36-35b-a3b-exl3-tensorfold-dgx-spark), [TensorFold-spark](https://github.com/quietvidarr/TensorFold-spark).
 
