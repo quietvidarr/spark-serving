@@ -12,6 +12,7 @@ docker info --format '{{json .Runtimes}}' | grep -q nvidia || [ -d /etc/cdi ] ||
   || die "no NVIDIA container runtime (nvidia-container-toolkit)"
 [ "$(uname -m)" = aarch64 ] || echo "install: warning: not aarch64; the recipes target DGX Spark (GB10)" >&2
 
+[ -f .env ] && { set -a; . ./.env; set +a; }   # PROMPT_CACHE_DIR etc. (same file docker compose reads)
 export PROMPT_CACHE_DIR="${PROMPT_CACHE_DIR:-$HOME/.cache/tensorfold-prompt-cache}"
 mkdir -p "$PROMPT_CACHE_DIR" state
 HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose up -d --build
