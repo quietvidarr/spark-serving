@@ -560,6 +560,14 @@ class Updater:
         img, local_name = await self.image_of(name)
         if not img:
             return {"error": "image unknown (model never started)"}
+        if MODELS[name].get("image_build"):
+            # built locally from the recipe (no registry): an update is due when the image the current
+            # recipe + patches would run (image_cmd) has not been built yet
+            rc, out = await host_run(f"docker image inspect {local_name} --format '{{{{.Id}}}}'",
+                                     capture=True, timeout=30)
+            have = rc == 0 and out.strip().startswith("sha256:")
+            return {"image": f"{local_name} (built locally)", "local_digest": out.strip() if have else None,
+                    "remote_digest": None, "update_available": not have}
         rc1, local = await host_run(
             f"docker image inspect {local_name} --format '{{{{json .RepoDigests}}}}'; "
             f"docker image inspect {local_name} --format '{{{{.Id}}}}'", capture=True, timeout=30)
@@ -592,12 +600,14 @@ class Updater:
         repo = MODELS[name].get("hf_repo")
         if not repo:
             return {"error": "no hf_repo configured"}
+        branch = MODELS[name].get("hf_branch", "main")     # repos that keep each quant on its own branch
         rc, local = await host_run(
-            f"cat ~/.cache/huggingface/hub/models--{repo.replace('/', '--')}/refs/main",
+            f"cat ~/.cache/huggingface/hub/models--{repo.replace('/', '--')}/refs/{branch}",
             capture=True, timeout=15)
-        r = {"repo": repo, "local_rev": local.strip() if rc == 0 else None, "remote_rev": None}
+        r = {"repo": repo if branch == "main" else f"{repo}@{branch}",
+             "local_rev": local.strip() if rc == 0 else None, "remote_rev": None}
         try:
-            async with self.web.get(f"https://huggingface.co/api/models/{repo}/revision/main",
+            async with self.web.get(f"https://huggingface.co/api/models/{repo}/revision/{branch}",
                                     timeout=ClientTimeout(total=30)) as resp:
                 if resp.status == 200:
                     r["remote_rev"] = (await resp.json()).get("sha")
@@ -646,6 +656,14 @@ class Updater:
         try:
             for part in parts:
                 job["step"] = part
+                if part == "recipe" and m.get("update_check"):
+                    # the recipe's own compatibility check with our patches comes first (exit 3: incompatible)
+                    rc, _ = await host_run(f"cd {m['dir']} && {m['update_check']}", logf, timeout=1800)
+                    if rc != 0:
+                        job["results"][part] = ("incompatible with our patches: left unchanged (see log)"
+                                                if rc == 3 else f"compatibility check failed (exit {rc})")
+                        ok = False
+                        break
                 if part == "recipe":
                     cmd = ("git fetch -q origin && "
                            "up=$(git rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo origin/main) && "

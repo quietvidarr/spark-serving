@@ -1,70 +1,82 @@
 {
-  "listen_host": "0.0.0.0",
-  "listen_port": 8888,
-  "backend_url": "http://127.0.0.1:8001",
-  "default_model": "Qwen3.6-35B-A3B-NVFP4",
-  "drain_timeout_s": 1800,
-  "ready_timeout_s": 2700,
-  "models": {
-    "Qwen3.6-35B-A3B-NVFP4": {
-      "engine": "vllm",
-      "weights_links": "cache",
-      "aliases": [
-        "unsloth/Qwen3.6-35B-A3B-NVFP4",
-        "qwen3.6-35b",
-        "35b",
-        "qwen3.6"
-      ],
-      "dir": "/home/USER/recipes/qwen3.6-35b",
-      "start": "HOST=127.0.0.1 PORT=8001 ./start.sh",
-      "stop": "./stop.sh",
-      "served_name": "unsloth/Qwen3.6-35B-A3B-NVFP4",
-      "container": "Qwen3.6-35B-A3B-NVFP4",
-      "hf_repo": "unsloth/Qwen3.6-35B-A3B-NVFP4",
-      "weights_update": "HF_HUB_OFFLINE=0 ~/recipes/qwen3.8-flash-next/.venv/bin/hf download unsloth/Qwen3.6-35B-A3B-NVFP4",
-      "mm_warmup": true
-    },
-    "Qwen3.8-Flash-Next-NVFP4": {
-      "engine": "vllm",
-      "aliases": [
-        "YOUR-ORG/Qwen3.8-Flash-Next-NVFP4",
-        "qwen3.8-flash-next",
-        "flash",
-        "qwen3.8",
-        "flash-next"
-      ],
-      "dir": "/home/USER/recipes/qwen3.8-flash-next",
-      "start": "BIND=127.0.0.1 PORT=8001 ./start.sh",
-      "stop": "./stop.sh",
-      "served_name": "qwen3.8-flash-next",
-      "container": "Qwen3.8-Flash-Next-NVFP4",
-      "hf_repo": "YOUR-ORG/Qwen3.8-Flash-Next-NVFP4",
-      "weights_update": "source .venv/bin/activate && ./download.sh",
-      "mm_warmup": true
-    },
-    "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold": {
-      "engine": "tensorfold",
-      "aliases": [
-        "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
-        "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
-        "Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
-        "qwen3.8-flash-next-tensorfold",
-        "flash-next-tensorfold",
-        "flash-tensorfold",
-        "flash-tf",
-        "tensorfold",
-        "tf"
-      ],
-      "dir": "/home/USER/recipes/qwen3.8-flash-next-tensorfold",
-      "start": "HOST=127.0.0.1 PORT=8001 ./start.sh",
-      "stop": "./stop.sh",
-      "served_name": "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
-      "container": "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
-      "hf_repo": "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
-      "weights_update": "bash -c 'source scripts/config.sh && ~/recipes/.dl-logs/hf-curl-download.sh \"$MODEL_ID\" \"$MODEL_REVISION\"'",
-      "image_cmd": "~/recipes/model-router/helpers/tensorfold-image.sh ref",
-      "image_update": "~/recipes/model-router/helpers/tensorfold-image.sh update"
-    }
+ "listen_host": "0.0.0.0",
+ "listen_port": 8888,
+ "backend_url": "http://127.0.0.1:8001",
+ "default_model": "Qwen3.6-35B-A3B-NVFP4",
+ "drain_timeout_s": 1800,
+ "ready_timeout_s": 2700,
+ "models": {
+  "Qwen3.6-35B-A3B-NVFP4": {
+   "engine": "vllm",
+   "weights_links": "cache",
+   "aliases": [
+    "unsloth/Qwen3.6-35B-A3B-NVFP4",
+    "qwen3.6-35b",
+    "35b",
+    "qwen3.6"
+   ],
+   "dir": "/home/USER/recipes/qwen3.6-35b",
+   "start": "HOST=127.0.0.1 PORT=8001 ./start.sh",
+   "stop": "./stop.sh",
+   "served_name": "unsloth/Qwen3.6-35B-A3B-NVFP4",
+   "container": "Qwen3.6-35B-A3B-NVFP4",
+   "hf_repo": "unsloth/Qwen3.6-35B-A3B-NVFP4",
+   "weights_update": "HF_HUB_OFFLINE=0 ~/recipes/qwen3.8-flash-next/.venv/bin/hf download unsloth/Qwen3.6-35B-A3B-NVFP4",
+   "mm_warmup": true
   },
-  "update_check_interval_s": 21600
+  "Qwen3.8-Flash-Next-NVFP4": {
+   "engine": "vllm",
+   "aliases": [
+    "YOUR-ORG/Qwen3.8-Flash-Next-NVFP4",
+    "qwen3.8-flash-next",
+    "flash",
+    "qwen3.8",
+    "flash-next"
+   ],
+   "dir": "/home/USER/recipes/qwen3.8-flash-next",
+   "start": "BIND=127.0.0.1 PORT=8001 ./start.sh",
+   "stop": "./stop.sh",
+   "served_name": "qwen3.8-flash-next",
+   "container": "Qwen3.8-Flash-Next-NVFP4",
+   "hf_repo": "YOUR-ORG/Qwen3.8-Flash-Next-NVFP4",
+   "weights_update": "source .venv/bin/activate && ./download.sh",
+   "mm_warmup": true
+  },
+  "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold": {
+   "engine": "tensorfold",
+   "aliases": [
+    "turboderp/Qwen3.8-Flash-Next-exl3",
+    "qwen38-flash-next-tf405",
+    "qwen3.8-flash-next-exl3",
+    "flash-next-exl3",
+    "flash-exl3",
+    "exl3-tensorfold",
+    "exl3",
+    "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
+    "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+    "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
+    "Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
+    "qwen3.8-flash-next-tensorfold",
+    "flash-next-tensorfold",
+    "flash-tensorfold",
+    "flash-tf",
+    "tensorfold",
+    "tf"
+   ],
+   "dir": "/home/USER/recipes/qwen3.8-flash-next-exl3-tensorfold",
+   "start": "./local/start.sh",
+   "stop": "./local/stop.sh",
+   "served_name": "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold",
+   "container": "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold",
+   "hf_repo": "turboderp/Qwen3.8-Flash-Next-exl3",
+   "hf_branch": "4.05bpw_h6_ng6",
+   "weights_update": "./local/download.sh",
+   "image_cmd": "./local/image.sh ref",
+   "image_update": "./local/image.sh update",
+   "image_build": true,
+   "update_check": "./local/check-update.sh",
+   "mm_warmup": true
+  }
+ },
+ "update_check_interval_s": 21600
 }
