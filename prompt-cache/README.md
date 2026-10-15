@@ -10,7 +10,7 @@ SSD prompt cache for TensorFold models: skip re-prefill across turns, conversati
 | GPU eviction | patch 0010, `cuda/keep_rank.py` | History first, shared starts last |
 | Disk store | patch 0006, `prompt_store.py` + `disk_points.py` | Every kept point written to SSD, loaded on demand |
 | Request log | router | `state/requests.jsonl`, `GET /router/cache` |
-| Data | `~/recipes/prompt-cache/store/` | `index.sqlite` + one folder per model key |
+| Data | `PROMPT_CACHE_DIR`, default `~/.cache/tensorfold-prompt-cache/` | `index.sqlite` + one folder per model key |
 
 ## How it works
 
@@ -32,7 +32,7 @@ SSD prompt cache for TensorFold models: skip re-prefill across turns, conversati
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PROMPT_CACHE_DIR` | `~/recipes/prompt-cache/store` | empty = off |
+| `PROMPT_CACHE_DIR` | `~/.cache/tensorfold-prompt-cache` | empty = off |
 | `TF_POINTS_LAST` | all | every message start; N = last N; 0 = upstream |
 | `TF_POINTS_GAP` | 256 | min gap for older starts |
 | `TF_PROMPT_CACHE_QUEUE_GIB` | 4 | host queue; past it points wait in GPU |

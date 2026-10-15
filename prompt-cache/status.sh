@@ -1,6 +1,6 @@
 #!/bin/bash
 # The TensorFold prompt cache on disk: points, pins, sizes per model key (read-only).
-DB="${1:-$HOME/recipes/prompt-cache/store}/index.sqlite"
+DB="${1:-${PROMPT_CACHE_DIR:-$HOME/.cache/tensorfold-prompt-cache}}/index.sqlite"
 [ -f "$DB" ] || { echo "no store at $DB"; exit 1; }
 python3 - "$DB" <<'EOF'
 import sqlite3, sys, time

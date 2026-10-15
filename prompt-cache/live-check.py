@@ -14,7 +14,7 @@ import urllib.request
 BASE = "http://127.0.0.1:8888/v1"
 MODEL = os.environ.get("MODEL", "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold")
 SRC = "".join(open(f, errors="ignore").read() for f in sorted(glob.glob("/usr/lib/python3*/email/*.py")))
-DB = os.environ.get("PROMPT_CACHE_DB", os.path.expanduser("~/recipes/prompt-cache/store/index.sqlite"))
+DB = os.environ.get("PROMPT_CACHE_DB", os.path.join(os.environ.get("PROMPT_CACHE_DIR", os.path.expanduser("~/.cache/tensorfold-prompt-cache")), "index.sqlite"))
 
 
 def ask(msgs, max_tokens=64, temperature=0.0):

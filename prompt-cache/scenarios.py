@@ -26,8 +26,8 @@ import urllib.request
 
 ROUTER = os.environ.get("ROUTER", "http://127.0.0.1:8888")
 MODEL = os.environ.get("MODEL", "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold")
-RECIPES = {"Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold": "qwen3.8-flash-next-exl3-tensorfold",
-           "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold": "qwen3.6-35b-a3b-exl3-tensorfold"}
+RECIPES = {"Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold": "qwen38-flash-next-dgx-spark",
+           "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold": "qwen36-35b-a3b-exl3-tensorfold-dgx-spark"}
 SRC = "".join(open(f, errors="ignore").read() for f in sorted(glob.glob("/usr/lib/python3*/email/*.py")))
 LENS = [3000, 80, 1500, 40, 4000, 200, 1200, 30, 2500]     # characters of the 9 user messages (~4 per token)
 LOG: list[dict] = []
@@ -152,7 +152,7 @@ def ideal(path):
     """Ideal prefill per request: tokens after the closest message start <= the first token differing from an
     earlier request of the run (the model's tokenizer and template, in its image)."""
 
-    recipe = os.path.expanduser(f"~/recipes/{RECIPES[MODEL]}")
+    recipe = os.path.join(os.environ.get("RECIPES_DIR", os.path.expanduser("~/recipes")), RECIPES[MODEL])
     cfg = subprocess.run(["bash", "-c", f'cd {recipe} && source local/config.sh >/dev/null 2>&1 && echo "$MODEL_DIR" '
                           '&& local_image'], capture_output=True, text=True).stdout.split("\n")
     mdir, image = cfg[0], cfg[1]
