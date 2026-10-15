@@ -42,9 +42,11 @@
       "weights_update": "source .venv/bin/activate && ./download.sh",
       "mm_warmup": true
     },
-    "Qwen3.8-Flash-Next-MLX-4bit-TensorFold": {
+    "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold": {
       "engine": "tensorfold",
       "aliases": [
+        "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+        "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
         "Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
         "qwen3.8-flash-next-tensorfold",
         "flash-next-tensorfold",
@@ -56,13 +58,12 @@
       "dir": "/home/USER/recipes/qwen3.8-flash-next-tensorfold",
       "start": "HOST=127.0.0.1 PORT=8001 ./start.sh",
       "stop": "./stop.sh",
-      "served_name": "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
-      "container": "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
-      "hf_repo": "Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
-      "weights_update": "HF_HUB_OFFLINE=0 ~/recipes/qwen3.8-flash-next/.venv/bin/hf download Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
+      "served_name": "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
+      "container": "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
+      "hf_repo": "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+      "weights_update": "bash -c 'source scripts/config.sh && ~/recipes/.dl-logs/hf-curl-download.sh \"$MODEL_ID\" \"$MODEL_REVISION\"'",
       "image_cmd": "~/recipes/model-router/helpers/tensorfold-image.sh ref",
-      "image_update": "~/recipes/model-router/helpers/tensorfold-image.sh update",
-      "weights_links": "cache"
+      "image_update": "~/recipes/model-router/helpers/tensorfold-image.sh update"
     }
   },
   "update_check_interval_s": 21600

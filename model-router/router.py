@@ -112,11 +112,19 @@ class VllmEngine(Engine):
 
 
 class TensorFoldEngine(Engine):
-    """TensorFold has no /metrics; /health carries requests_running and context_length."""
+    """TensorFold's Python engine has no /metrics; /health carries requests_running and context_length.
+    The Zig engine (tensorfold-native) moved them: tensorfold:requests_running/waiting in /metrics,
+    context_length in /v1/models."""
     name = "tensorfold"
 
     async def busy(self, session):
-        return float((await self._json(session, "/health")).get("requests_running") or 0)
+        h = await self._json(session, "/health")
+        if "requests_running" in h:
+            return float(h["requests_running"] or 0)
+        async with session.get(f"{BACKEND}/metrics", timeout=ClientTimeout(total=5)) as r:
+            text = await r.text() if r.status == 200 else ""
+        return sum(float(v) for v in re.findall(
+            r'^tensorfold:requests_(?:running|waiting)(?:\{[^}]*\})?\s+([0-9.eE+-]+)', text, re.M))
 
     async def context_length(self, session, served_name):
         n = (await self._json(session, "/health")).get("context_length")
