@@ -22,7 +22,8 @@
             "container": "Qwen3.6-35B-A3B-NVFP4",
             "hf_repo": "unsloth/Qwen3.6-35B-A3B-NVFP4",
             "weights_update": "HF_HUB_OFFLINE=0 ~/recipes/qwen3.8-flash-next/.venv/bin/hf download unsloth/Qwen3.6-35B-A3B-NVFP4",
-            "mm_warmup": true
+            "mm_warmup": true,
+            "effort": "budget"
         },
         "Qwen3.8-Flash-Next-NVFP4": {
             "engine": "vllm",
@@ -40,7 +41,8 @@
             "container": "Qwen3.8-Flash-Next-NVFP4",
             "hf_repo": "YOUR-ORG/Qwen3.8-Flash-Next-NVFP4",
             "weights_update": "source .venv/bin/activate && ./download.sh",
-            "mm_warmup": true
+            "mm_warmup": true,
+            "effort": "template"
         },
         "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold": {
             "engine": "tensorfold",
@@ -75,7 +77,8 @@
             "image_update": "./local/image.sh update",
             "image_build": true,
             "update_check": "./local/check-update.sh",
-            "mm_warmup": true
+            "mm_warmup": true,
+            "effort": "template"
         },
         "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold": {
             "engine": "tensorfold",
@@ -102,7 +105,8 @@
             "image_cmd": "./local/image.sh ref",
             "image_update": "./local/image.sh update",
             "image_build": true,
-            "update_check": "./local/check-update.sh"
+            "update_check": "./local/check-update.sh",
+            "effort": "budget"
         }
     },
     "update_check_interval_s": 21600

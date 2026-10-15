@@ -23,6 +23,8 @@ import time
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 from aiohttp.client_exceptions import ClientConnectionResetError, ClientConnectorError
 
+import thinking
+
 CFG = json.load(open(os.environ.get("ROUTER_CONFIG", "/app/models.json")))
 STATE_DIR = os.environ.get("STATE_DIR", "/state")
 HOST_UID = os.environ.get("HOST_UID", "1000")
@@ -988,13 +990,41 @@ async def proxy(request):
                      and request.path.rstrip("/").endswith("completions") else None)
             status = None
             try:
-                fwd = body
+                fwd, out, added_budget = body, data, None
                 if isinstance(data, dict) and "model" in data:
                     data["model"] = MODELS[name]["served_name"]
                     fwd = json.dumps(data).encode()
+                eng = engine_of(name).name
+                if (isinstance(data, dict) and request.method == "POST"
+                        and request.path.rstrip("/").endswith("completions")):
+                    # thinking on/off / effort / budget -> the engine's own dialect (thinking.py)
+                    cfg = {**MODELS[name], **({"thinking_budget": False} if BUDGET_REFUSED.get(name) else {})}
+                    out, intent = thinking.normalize(data, eng, cfg)
+                    bf = thinking.adapter_for(eng).budget_field
+                    if bf and bf in out and bf not in data:
+                        added_budget = bf
+                    if meter and not intent.empty:   # field names and small values only, never content
+                        meter.rec["think"] = {"in": [f"{k}={v}" for k, v in intent.sources],
+                                              "added": thinking.added_fields(data, out)}
+                    if out is not data:
+                        fwd = json.dumps(out).encode()
                 headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
-                async with mgr.session.request(request.method, BACKEND + request.path_qs,
-                                               data=fwd if fwd else None, headers=headers) as r:
+                r = await mgr.session.request(request.method, BACKEND + request.path_qs,
+                                              data=fwd if fwd else None, headers=headers)
+                if r.status == 400 and added_budget and not BUDGET_REFUSED.get(name):
+                    # the engine refuses a budget the router added (e.g. vLLM without a reasoning config):
+                    # remember that for this model and send the request again without it
+                    text = await r.text()
+                    r.release()
+                    if added_budget in text:
+                        BUDGET_REFUSED[name] = True
+                        log.warning("%s refused %s; not sending it again: %s", name, added_budget, text[:200])
+                        fwd = json.dumps(thinking.strip_budget(out, eng)).encode()
+                        r = await mgr.session.request(request.method, BACKEND + request.path_qs,
+                                                      data=fwd, headers=headers)
+                    else:
+                        r = _Replayed(r.status, r.headers, text.encode())
+                async with r:
                     status = r.status
                     if early:   # status/headers already sent; just relay the body
                         if r.status != 200 and stream:
@@ -1029,6 +1059,29 @@ async def proxy(request):
         # client went away; closing the backend request makes the engine abort it
         log.info("client disconnected (%s %s)", request.method, request.path)
         raise
+
+
+BUDGET_REFUSED = {}   # model -> True once its engine refused a router-added thinking budget (until router restart)
+
+
+class _Replayed:
+    """A backend response whose body was already read (400 inspected for the budget retry)."""
+
+    def __init__(self, status, headers, body):
+        self.status, self.headers, self._body = status, headers, body
+        self.content = self
+
+    async def read(self):
+        return self._body
+
+    async def iter_any(self):
+        yield self._body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
 
 
 KEEPALIVE_S = 2   # browsers drop a stream that shows no activity ~5 s after a "network change"
