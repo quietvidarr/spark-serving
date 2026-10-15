@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.bak-*
+model-router/state/
+model-router/prof/
+prompt-cache/store/
+*.log
+.env
+.env.local
