@@ -9,23 +9,9 @@
         "Qwen3.8-Flash-Next-EXL3-4.05bpw-TensorFold": {
             "engine": "tensorfold",
             "aliases": [
-                "turboderp/Qwen3.8-Flash-Next-exl3",
-                "qwen38-flash-next-tf405",
-                "qwen3.8-flash-next-exl3",
-                "flash-next-exl3",
-                "flash-exl3",
-                "exl3-tensorfold",
-                "exl3",
-                "Qwen3.8-Flash-Next-INT4-AutoRound-TensorFold",
-                "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
-                "Qwen3.8-Flash-Next-MLX-4bit-TensorFold",
-                "Vontra/Qwen3.8-Flash-Next-MLX-4bit-MTP",
-                "qwen3.8-flash-next-tensorfold",
-                "flash-next-tensorfold",
-                "flash-tensorfold",
                 "flash-tf",
-                "tensorfold",
-                "tf"
+                "tf",
+                "tensorfold"
             ],
             "dir": "~/recipes/qwen38-flash-next-dgx-spark",
             "repo": "https://github.com/quietvidarr/qwen38-flash-next-dgx-spark",
@@ -47,16 +33,8 @@
         "Qwen3.6-35B-A3B-EXL3-6.00bpw-TensorFold": {
             "engine": "tensorfold",
             "aliases": [
-                "yeasah/Qwen3.6-35B-A3B-exl3",
-                "qwen3.6-35b-exl3",
-                "qwen3.6-35b-a3b-exl3",
-                "qwen36-35b-exl3",
-                "qwen36-exl3",
-                "qwen3.6-exl3",
-                "35b-exl3",
-                "35b-exl3-tensorfold",
-                "35b-tensorfold",
-                "35b-tf"
+                "35b-tf",
+                "35b-exl3"
             ],
             "dir": "~/recipes/qwen36-35b-a3b-exl3-tensorfold-dgx-spark",
             "repo": "https://github.com/quietvidarr/qwen36-35b-a3b-exl3-tensorfold-dgx-spark",
