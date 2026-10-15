@@ -17,3 +17,5 @@ services:
       - ./models.json:/app/models.json:ro
       - ./ui.html:/app/ui.html:ro
       - ./state:/state
+      # the TensorFold prompt cache's index, read for GET /router/cache (~/recipes/prompt-cache)
+      - ../prompt-cache/store:/prompt-cache:ro

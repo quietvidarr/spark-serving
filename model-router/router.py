@@ -12,10 +12,12 @@ with "engine" in models.json (vllm, tensorfold, or openai for anything else).
 - Recipes run on the host as the normal user via nsenter, exactly like ./start.sh.
 """
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import re
+import sqlite3
 import time
 
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
@@ -842,6 +844,118 @@ async def health(request):
     return web.json_response({"router": "ok", **mgr.status()})
 
 
+REQ_LOG = f"{STATE_DIR}/requests.jsonl"     # one line a completion: tokens, cached tokens, time to first token
+REQ_LOG_MAX = 64 << 20                       # then renamed to requests.jsonl.1 (the one before is dropped)
+STORE_DB = os.environ.get("PROMPT_CACHE_DB", "/prompt-cache/index.sqlite")
+
+
+class Meter:
+    """Watches a relayed completion for its first token and its usage, then appends one line to REQ_LOG."""
+
+    def __init__(self, request, data, stream):
+        msgs = data.get("messages") if isinstance(data.get("messages"), list) else None
+        head = json.dumps(msgs[:2] if msgs else data.get("prompt", "")[:2000], sort_keys=True, default=str)
+        self.rec = {"t": round(time.time(), 3), "path": request.path, "client": request.remote, "stream": stream,
+                    "conv": hashlib.blake2b(head.encode(), digest_size=6).hexdigest(),
+                    "messages": len(msgs) if msgs else None}
+        self.stream, self.t0, self.ttft, self.usage, self.buf, self.body = stream, time.monotonic(), None, None, "", b""
+
+    def feed(self, chunk):
+        if not self.stream:
+            if len(self.body) < (8 << 20):
+                self.body += chunk
+            return
+        self.buf += chunk.decode("utf-8", "replace")
+        *lines, self.buf = self.buf.split("\n")
+        for line in lines:
+            if not line.startswith("data:") or line.startswith("data: [DONE]"):
+                continue
+            try:
+                d = json.loads(line[5:])
+            except ValueError:
+                continue
+            if not isinstance(d, dict):
+                continue
+            self.usage = d.get("usage") or self.usage
+            if self.ttft is None:
+                for ch in d.get("choices") or []:
+                    dl = ch.get("delta") or {}
+                    if (dl.get("content") or dl.get("reasoning_content") or dl.get("reasoning")
+                            or dl.get("tool_calls") or ch.get("text")):
+                        self.ttft = time.monotonic() - self.t0
+                        break
+
+    def done(self, name, status):
+        total = time.monotonic() - self.t0
+        if not self.stream:
+            try:
+                self.usage = json.loads(self.body).get("usage")
+            except (ValueError, AttributeError):
+                pass
+        u = self.usage or {}
+        rec = {**self.rec, "model": name, "status": status, "prompt": u.get("prompt_tokens"),
+               "cached": (u.get("prompt_tokens_details") or {}).get("cached_tokens"),
+               "completion": u.get("completion_tokens"),
+               "ttft_s": round(self.ttft if self.ttft is not None else total, 3), "total_s": round(total, 3)}
+        try:
+            if os.path.exists(REQ_LOG) and os.path.getsize(REQ_LOG) > REQ_LOG_MAX:
+                os.replace(REQ_LOG, REQ_LOG + ".1")
+            with open(REQ_LOG, "a") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError as e:
+            log.warning("request log: %s", e)
+
+
+async def router_cache(request):
+    """Prompt-cache report: per model and per conversation from REQ_LOG, and the TensorFold disk store."""
+    hours = float(request.query.get("hours", 24))
+    since = time.time() - hours * 3600
+    rows = []
+    for path in (REQ_LOG + ".1", REQ_LOG):
+        try:
+            with open(path) as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue
+                    if r.get("t", 0) >= since and r.get("prompt"):
+                        rows.append(r)
+        except OSError:
+            pass
+
+    def summary(rs):
+        p = sum(r["prompt"] for r in rs)
+        c = sum(r.get("cached") or 0 for r in rs)
+        tt = sorted(r["ttft_s"] for r in rs)
+        return {"requests": len(rs), "prompt_tokens": p, "cached_tokens": c,
+                "hit_pct": round(100 * c / p, 1) if p else None,
+                "uncached_tokens": p - c, "ttft_median_s": tt[len(tt) // 2] if tt else None}
+
+    per_model, per_conv = {}, {}
+    for r in rows:
+        per_model.setdefault(r.get("model"), []).append(r)
+        per_conv.setdefault((r.get("model"), r.get("conv")), []).append(r)
+    convs = sorted(per_conv.items(), key=lambda kv: -sum(r["prompt"] - (r.get("cached") or 0) for r in kv[1]))
+    out = {"hours": hours, "all": summary(rows), "models": {m: summary(rs) for m, rs in per_model.items()},
+           "top_conversations": [{"model": m, "conv": c, "last": max(r["t"] for r in rs), **summary(rs)}
+                                 for (m, c), rs in convs[:15]],
+           "recent": rows[-20:]}
+    try:
+        db = sqlite3.connect(f"file:{STORE_DB}?mode=ro", uri=True, timeout=5)
+        out["disk_store"] = [{"label": label, "key": model, "pinned": bool(pinned), "points": n,
+                              "point_gib": round(b / 2**30, 2), "hits": hits}
+                             for label, model, pinned, n, b, hits in db.execute(
+                                 "SELECT label, model, pinned, COUNT(*), SUM(bytes), SUM(hits) FROM points "
+                                 "GROUP BY label, model, pinned")]
+        out["disk_store_block_gib"] = round((db.execute("SELECT COALESCE(SUM(bytes),0) FROM blocks")
+                                             .fetchone()[0]) / 2**30, 2)
+        db.close()
+    except sqlite3.Error as e:
+        out["disk_store"] = f"unavailable: {e}"
+    return web.json_response(out)
+
+
 async def proxy(request):
     body = await request.read()
     data = None
@@ -870,6 +984,9 @@ async def proxy(request):
                 if early:
                     return await finish_early_error(early, str(e), stream)
                 return err(503, str(e))
+            meter = (Meter(request, data, stream) if request.method == "POST" and isinstance(data, dict)
+                     and request.path.rstrip("/").endswith("completions") else None)
+            status = None
             try:
                 fwd = body
                 if isinstance(data, dict) and "model" in data:
@@ -878,11 +995,14 @@ async def proxy(request):
                 headers = {k: v for k, v in request.headers.items() if k.lower() not in HOP}
                 async with mgr.session.request(request.method, BACKEND + request.path_qs,
                                                data=fwd if fwd else None, headers=headers) as r:
+                    status = r.status
                     if early:   # status/headers already sent; just relay the body
                         if r.status != 200 and stream:
                             await early.write(b"data: " + await r.read() + b"\n\ndata: [DONE]\n\n")
                         else:
                             async for chunk in r.content.iter_any():
+                                if meter:
+                                    meter.feed(chunk)
                                 await early.write(chunk)
                         await early.write_eof()
                         return early
@@ -891,6 +1011,8 @@ async def proxy(request):
                     resp.headers["X-Router-Model"] = name
                     await resp.prepare(request)
                     async for chunk in r.content.iter_any():
+                        if meter:
+                            meter.feed(chunk)
                         await resp.write(chunk)
                     await resp.write_eof()
                     return resp
@@ -900,6 +1022,8 @@ async def proxy(request):
                     msg = f"{name} is not answering"
                     return await finish_early_error(early, msg, stream) if early else err(502, msg)
             finally:
+                if meter and status is not None:
+                    meter.done(name, status)
                 await mgr.release()
     except (ConnectionResetError, ClientConnectionResetError, asyncio.CancelledError):
         # client went away; closing the backend request makes the engine abort it
@@ -971,6 +1095,7 @@ def main():
     app.router.add_post("/router/update", router_update)
     app.router.add_post("/router/restart", router_restart)
     app.router.add_get("/health", health)
+    app.router.add_get("/router/cache", router_cache)
     app.router.add_route("*", "/{tail:.*}", proxy)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
