@@ -6,7 +6,7 @@
 # If upstream changed the same lines, the rebase is aborted and that repo is left
 # exactly as it was — resolve by hand.
 #
-# A recipe with its own local/check-update.sh + local/update.sh (the two EXL3 TensorFold ones) is
+# A recipe with its own local/check-update.sh + local/update.sh (both TensorFold recipes) is
 # checked for compatibility with our patches first and updated only through its own script
 # (see its LOCAL_CHANGES.md).
 #
@@ -16,8 +16,8 @@ set -u
 R=~/recipes
 CHECK=0; [ "${1:-}" = "--check" ] && CHECK=1
 
-for repo in qwen3.6-35b qwen3.8-flash-next qwen3.8-flash-next-exl3-tensorfold qwen3.6-35b-a3b-exl3-tensorfold dashboard; do
-  d=$R/$repo
+for repo in qwen38-flash-next-dgx-spark qwen36-35b-a3b-exl3-tensorfold-dgx-spark; do
+  d=$R/$repo; [ -d "$d/.git" ] || continue
   echo "=================== $repo"
   if [ -x "$d/local/update.sh" ]; then       # checks compatibility itself before touching anything
     if [ $CHECK = 1 ]; then "$d/local/check-update.sh" | sed 's/^/  /'; else "$d/local/update.sh" | sed 's/^/  /'; fi
