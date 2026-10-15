@@ -7,8 +7,18 @@ OpenAI-compatible router on :8888. Runs one model at a time on 127.0.0.1:8001, s
 | `router.py` | Server |
 | `thinking.py` | Thinking/reasoning normalization |
 | `models.json` | Models, read at start |
-| `test_thinking.py` | Unit tests |
+| `test_thinking.py`, `test_install.py` | Unit tests (`test_install.py` needs aiohttp) |
 | `ui.html` | Test page |
+
+## Install a model
+
+```bash
+curl -X POST localhost:8888/router/install -d '{"model": "35b-tf"}'   # or Install in the UI
+curl -s localhost:8888/router/installs                               # state, step, log tail
+```
+Background job, one at a time: clone `repo`@`branch` into `dir`, build the image (+ `prebuild`), download the weights. Only missing parts run; re-run after a failure.
+`requires` models get recipe + image first. Log: `state/logs/install-<model>.log`.
+Not installed: `/v1/models` and `/router/status` say `"installed": false`; requests get 409 `not installed: POST /router/install`. No auto-install.
 
 ## Deploy
 
@@ -43,6 +53,10 @@ Offline: `FROM model-router-model-router:latest` + `COPY router.py thinking.py /
 | `engine` | `vllm`, `tensorfold`, other = generic OpenAI |
 | `effort` | `template` (template reads `reasoning_effort`) or `budget` (effort → token budget) |
 | `thinking_budget` | `false` = never send a router-made budget |
+| `repo`, `branch` | Recipe git repo, branch; cloned into `dir` by `/router/install` |
+| `requires` | Models whose recipe + image install first (base image, sibling dir) |
+| `weights_install` | Weights download for install; default `weights_update` |
+| `prebuild` | Run after the image build (optional; failure is not fatal) |
 
 ### Engine dialects
 
