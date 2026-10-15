@@ -1,0 +1,19 @@
+services:
+  model-router:
+    build: .
+    container_name: model-router
+    # Comes back after reboot; no model is started until a request asks for one.
+    restart: always
+    # Host network: listens on 0.0.0.0:8888 and reaches the model on 127.0.0.1:8001.
+    network_mode: host
+    # Host PID + privileged so it can nsenter into the host and run the recipes'
+    # start.sh / stop.sh as the normal user (same as running them by hand).
+    pid: host
+    privileged: true
+    environment:
+      - HOST_UID=1000
+      - HOST_GID=1000
+    volumes:
+      - ./models.json:/app/models.json:ro
+      - ./ui.html:/app/ui.html:ro
+      - ./state:/state
