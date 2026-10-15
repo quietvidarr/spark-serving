@@ -33,6 +33,11 @@
   .stat b { display:block; font-size:18px; font-variant-numeric:tabular-nums; }
   .stat span { font-size:12px; color:var(--muted); }
   code { font-size:12px; }
+  .mrow { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .mrow:first-of-type { border-top:none; }
+  .mname { font-weight:600; word-break:break-all; }
+  .mjob { font-size:12px; color:var(--muted); width:100%; }
+  .mjob pre { white-space:pre-wrap; word-wrap:break-word; margin:6px 0 0; max-height:180px; overflow:auto; font-size:11px; }
 </style>
 </head>
 <body>
@@ -52,6 +57,11 @@
       <button id="stop" class="ghost" disabled>Stop</button>
       <span id="status"></span>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><b>Models</b><button id="recheck" class="ghost">Re-check</button></div>
+    <div id="models"></div>
   </div>
 
   <div class="card">
@@ -77,7 +87,8 @@ async function loadModels() {
   sel.innerHTML = "";
   for (const m of j.data) {
     const o = document.createElement("option");
-    o.value = m.id; o.textContent = m.id + (m.id !== "any" && m.loaded ? "  (loaded)" : "");
+    o.value = m.id; o.textContent = m.id + (m.id !== "any" && m.loaded ? "  (loaded)" : "")
+      + (m.installed === false ? "  (not installed)" : "");
     sel.appendChild(o);
   }
   sel.value = keep || "any";
@@ -170,7 +181,42 @@ $("send").onclick = async () => {
 $("stop").onclick = () => ctrl && ctrl.abort();
 $("prompt").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("send").click(); });
 
-loadModels(); pollStatus(); setInterval(pollStatus, 3000);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function loadInstalls(refresh) {
+  try {
+    const j = await (await fetch("/router/installs" + (refresh ? "?refresh=1" : ""))).json();
+    let h = "", running = false;
+    for (const [name, m] of Object.entries(j.models)) {
+      const job = m.job, active = job && (job.state === "running" || job.state === "queued");
+      running = running || active;
+      const pill = m.installed ? '<span class="pill ready">installed</span>'
+        : m.installed === false ? `<span class="pill busy">not installed: ${esc((m.missing || []).join(", "))}</span>`
+        : '<span class="pill">checking</span>';
+      h += `<div class="mrow"><span><span class="mname">${esc(name)}</span>${pill}</span>`;
+      if (m.installed === false) h += `<button data-install="${esc(name)}" ${active ? "disabled" : ""}>${active ? "Installing…" : "Install"}</button>`;
+      if (job) {
+        const res = Object.entries(job.results || {}).map(([k, v]) => esc(k) + ": " + esc(v)).join(" · ");
+        h += `<div class="mjob">install <span class="pill ${job.state === "done" ? "ready" : job.state === "failed" ? "err" : "busy"}">${esc(job.state)}</span>`
+           + (job.step ? ` ${esc(job.step)}` : "") + (res ? ` · ${res}` : "") + (job.error ? ` · ${esc(job.error)}` : "")
+           + (job.log_tail ? `<pre>${esc(job.log_tail)}</pre>` : "") + "</div>";
+      }
+      h += "</div>";
+    }
+    $("models").innerHTML = h;
+    for (const b of document.querySelectorAll("[data-install]")) b.onclick = async () => {
+      b.disabled = true; b.textContent = "Installing…";
+      const r = await fetch("/router/install", {method: "POST", headers: {"Content-Type": "application/json"},
+                                                body: JSON.stringify({model: b.dataset.install})});
+      if (!r.ok) alert((await r.json()).error?.message || r.status);
+      loadInstalls();
+    };
+    clearTimeout(loadInstalls.t);
+    loadInstalls.t = setTimeout(loadInstalls, running ? 3000 : 30000);
+  } catch { $("models").textContent = "router unreachable"; }
+}
+$("recheck").onclick = () => loadInstalls(true);
+
+loadModels(); pollStatus(); setInterval(pollStatus, 3000); loadInstalls();
 </script>
 </body>
 </html>
