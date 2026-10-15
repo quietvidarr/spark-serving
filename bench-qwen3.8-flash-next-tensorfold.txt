@@ -1,0 +1,18 @@
+== Qwen3.8-Flash-Next-MLX-4bit-TensorFold (direct :8001, patches on)  (Qwen3.8-Flash-Next-MLX-4bit-TensorFold) @ http://127.0.0.1:8001/v1
+  short prompt                 prompt=    43 tok  gen= 256 tok  TTFT=     194 ms  prefill=     221 tok/s  decode=  33.6 tok/s  total=   7.8 s
+  ~2k-token prompt             prompt=  2248 tok  gen= 256 tok  TTFT=    1118 ms  prefill=    2011 tok/s  decode=  58.0 tok/s  total=   5.5 s
+  ~8k-token prompt             prompt=  8848 tok  gen= 256 tok  TTFT=    3767 ms  prefill=    2349 tok/s  decode=  27.9 tok/s  total=  12.9 s
+  ~32k-token prompt            prompt= 35249 tok  gen= 128 tok  TTFT=   15005 ms  prefill=    2349 tok/s  decode=  17.0 tok/s  total=  22.5 s
+  4 concurrent streams          aggregate=  46.1 tok/s  per-stream decode=  12.7 tok/s  avg TTFT=1048 ms  wall=22.2 s
+  8 concurrent streams          aggregate=  72.8 tok/s  per-stream decode=  19.1 tok/s  avg TTFT=5339 ms  wall=28.1 s
+
+== Flash EXL3 TensorFold (0001-0009, router)  (2026-10-13 13:35)
+  conc 1  prompt   2245  gen 512  TTFT avg    1284 ms max    1284 ms  prefill agg    1749 tok/s  decode/stream   49.8 tok/s  decode agg   49.8 tok/s  steady   49.8/stream   49.8 total  wall   11.5 s
+  conc 2  prompt   2245  gen 512  TTFT avg    2365 ms max    2457 ms  prefill agg    1828 tok/s  decode/stream   35.3 tok/s  decode agg   70.6 tok/s  steady   35.2/stream   70.4 total  wall   17.0 s
+  conc 4  prompt   2245  gen 512  TTFT avg    4332 ms max    4653 ms  prefill agg    1930 tok/s  decode/stream   24.9 tok/s  decode agg   99.4 tok/s  steady   25.1/stream  100.4 total  wall   25.6 s
+  conc 8  prompt   2245  gen 512  TTFT avg    6782 ms max    9573 ms  prefill agg    1876 tok/s  decode/stream   15.4 tok/s  decode agg  122.9 tok/s  steady   16.5/stream  131.8 total  wall   42.9 s
+  conc 1  prompt   8845  gen 256  TTFT avg    4482 ms max    4482 ms  prefill agg    1974 tok/s  decode/stream   29.9 tok/s  decode agg   29.9 tok/s  steady   29.9/stream   29.9 total  wall   13.0 s
+  conc 2  prompt   8845  gen 256  TTFT avg    8226 ms max    8724 ms  prefill agg    2028 tok/s  decode/stream   30.1 tok/s  decode agg   60.1 tok/s  steady   31.7/stream   63.3 total  wall   16.7 s
+  conc 4  prompt   8845  gen 256  TTFT avg   13051 ms max   18683 ms  prefill agg    1894 tok/s  decode/stream   17.1 tok/s  decode agg   68.3 tok/s  steady   24.1/stream   96.6 total  wall   30.3 s
+  conc 8  prompt   8845  gen 256  TTFT avg   25556 ms max   38550 ms  prefill agg    1835 tok/s  decode/stream   10.8 tok/s  decode agg   86.3 tok/s  steady   16.3/stream  130.4 total  wall   54.3 s
+  conc 1  prompt  33045  gen 128  TTFT avg   16583 ms max   16583 ms  prefill agg    1993 tok/s  decode/stream   24.5 tok/s  decode agg   24.5 tok/s  steady   24.5/stream   24.5 total  wall   21.8 s

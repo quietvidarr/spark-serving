@@ -1,0 +1,7 @@
+== Qwen3.8 Flash Next NVFP4  (qwen3.8-flash-next) @ http://127.0.0.1:8888/v1
+  short prompt                 prompt=    43 tok  gen= 256 tok  TTFT=    1053 ms  prefill=      41 tok/s  decode=  31.5 tok/s  total=   9.2 s
+  ~2k-token prompt             prompt=  2248 tok  gen= 256 tok  TTFT=    2814 ms  prefill=     799 tok/s  decode=  50.6 tok/s  total=   7.9 s
+  ~8k-token prompt             prompt=  8848 tok  gen= 256 tok  TTFT=    4130 ms  prefill=    2142 tok/s  decode=  44.6 tok/s  total=   9.8 s
+  ~32k-token prompt            prompt= 35248 tok  gen= 128 tok  TTFT=   16328 ms  prefill=    2159 tok/s  decode=  44.8 tok/s  total=  19.2 s
+  4 concurrent streams          aggregate=  74.4 tok/s  per-stream decode=  21.1 tok/s  avg TTFT=1289 ms  wall=13.8 s
+  8 concurrent streams          aggregate=  80.7 tok/s  per-stream decode=  21.1 tok/s  avg TTFT=6669 ms  wall=25.4 s

@@ -1,0 +1,7 @@
+== Qwen3.6-35B-A3B NVFP4  (unsloth/Qwen3.6-35B-A3B-NVFP4) @ http://127.0.0.1:8888/v1
+  short prompt                 prompt=    41 tok  gen= 256 tok  TTFT=     103 ms  prefill=     400 tok/s  decode=  76.8 tok/s  total=   3.4 s
+  ~2k-token prompt             prompt=  2248 tok  gen= 256 tok  TTFT=     395 ms  prefill=    5697 tok/s  decode=  82.2 tok/s  total=   3.5 s
+  ~8k-token prompt             prompt=  8848 tok  gen= 256 tok  TTFT=    1497 ms  prefill=    5909 tok/s  decode=  81.0 tok/s  total=   4.6 s
+  ~32k-token prompt            prompt= 35249 tok  gen= 128 tok  TTFT=   10934 ms  prefill=    3224 tok/s  decode=  80.8 tok/s  total=  12.5 s
+  4 concurrent streams          aggregate= 136.8 tok/s  per-stream decode=  43.1 tok/s  avg TTFT=1247 ms  wall=7.5 s
+  8 concurrent streams          aggregate= 267.7 tok/s  per-stream decode=  38.8 tok/s  avg TTFT=903 ms  wall=7.6 s
