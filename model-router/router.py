@@ -48,6 +48,16 @@ for _name, _m in MODELS.items():
             log.warning("alias %r of %s already names %s: ignored", a, _name, ALIASES[a.lower()])
 
 
+for _name, _m in MODELS.items():   # "requires": model names or aliases -> canonical names
+    _req = _m.get("requires") or []
+    _m["requires"] = []
+    for _r in [_req] if isinstance(_req, str) else _req:
+        if _r.lower() in ALIASES:
+            _m["requires"].append(ALIASES[_r.lower()])
+        else:
+            log.warning("%s requires unknown model %r: ignored", _name, _r)
+
+
 class _QuietDisconnects(logging.Filter):
     """Client hang-ups are normal (e.g. a user cancels a stream); don't dump tracebacks."""
     def filter(self, record):
@@ -357,7 +367,7 @@ class Manager:
                         if not start_if_idle:   # probes/metrics: answer now, never wait
                             raise SwitchFailed(f"no model is ready (router state: {self.state})")
                         if self.switch_task is None:
-                            w = self.last_used if self.last_used in MODELS else CFG["default_model"]
+                            w = self.any_target()
                     if w is not None and self.state == "ready" and self.current == w:
                         self.inflight += 1
                         self._mark_used(w)
@@ -370,6 +380,13 @@ class Manager:
                     await self.cond.wait()
             finally:
                 self.waiting -= 1
+
+    def any_target(self):
+        """Model "any" starts when none is loaded: the last used one, else the first installed one."""
+        w = self.last_used if self.last_used in MODELS else CFG["default_model"]
+        if installer.installed(w) is False:
+            w = next((n for n in MODELS if installer.installed(n)), w)
+        return w
 
     def needs_wait(self, want):
         """True if serving `want` would have to wait for a load/switch."""
@@ -496,7 +513,8 @@ class Manager:
             "loaded_for_s": round(time.time() - self.loaded_since) if self.loaded_since else None,
             "last_error": self.last_error,
             "models": {n: {"aliases": m.get("aliases", []), "served_name": m["served_name"],
-                           "container": m["container"], "engine": engine_of(n).name}
+                           "container": m["container"], "engine": engine_of(n).name,
+                           "installed": installer.installed(n), "missing": installer.missing(n)}
                        for n, m in MODELS.items()},
         }
 
@@ -628,6 +646,9 @@ class Updater:
                 return
             for name in MODELS:
                 res = {}
+                if (installer.have.get(name) or {}).get("recipe") is False:
+                    self.info[name] = {p: {"error": "not installed"} for p in ("recipe", "image", "weights")}
+                    continue
                 for part, fn in (("recipe", self.check_recipe), ("image", self.check_image),
                                  ("weights", self.check_weights)):
                     try:
@@ -746,6 +767,185 @@ class Updater:
 updater = Updater()
 
 
+# ---------------------------------------------------------------- installs
+class Installer:
+    """Installs a model from models.json: clone its recipe ("repo", "branch") into "dir", build its image
+    ("image_update", then "prebuild"), download its weights ("weights_install" or "weights_update").
+    "requires": models whose recipe + image are installed first (e.g. a base image, a sibling dir)."""
+    PARTS = ("recipe", "image", "weights")
+
+    def __init__(self):
+        self.have = {}          # model -> {"recipe": bool, "image": bool, "weights": bool}
+        self.checked_at = None
+        self.jobs = {}          # model -> job dict
+        self.lock = asyncio.Lock()   # one install at a time (shared dependencies)
+
+    def check_script(self, name):
+        m = MODELS[name]
+        s = f'd={m["dir"]}; [ -d "$d/.git" ] && echo RECIPE=1 || echo RECIPE=0; '
+        if m.get("hf_repo"):
+            md = f"$HOME/.cache/huggingface/hub/models--{m['hf_repo'].replace('/', '--')}"
+            s += (f'r=$(cat {md}/refs/{m.get("hf_branch", "main")} 2>/dev/null); '
+                  f'[ -n "$r" ] && [ -d {md}/snapshots/"$r" ] && echo WEIGHTS=1 || echo WEIGHTS=0; ')
+        if m.get("image_cmd"):
+            s += (f'img=$(cd "$d" 2>/dev/null && {m["image_cmd"]} 2>/dev/null | tail -1 | awk \'{{print $NF}}\'); '
+                  '[ -n "$img" ] && docker image inspect "$img" >/dev/null 2>&1 && echo IMAGE=1 || echo IMAGE=0; ')
+        elif m.get("image"):
+            s += f'docker image inspect {m["image"]} >/dev/null 2>&1 && echo IMAGE=1 || echo IMAGE=0; '
+        return s
+
+    async def check(self, name):
+        rc, out = await host_run(self.check_script(name), capture=True, timeout=120)
+        if "RECIPE=" not in out:
+            raise RuntimeError(f"install check failed (exit {rc}): {out.strip()[-200:]}")
+        h = {p: True for p in self.PARTS}      # nothing configured to check = present
+        for line in out.splitlines():
+            k, _, v = line.strip().partition("=")
+            if k.lower() in h and v in ("0", "1"):
+                h[k.lower()] = v == "1"
+        if not h["recipe"]:                    # no recipe dir: image tag unknown, nothing else counts
+            h["image"] = h["image"] and not MODELS[name].get("image_cmd")
+        self.have[name] = h
+        return h
+
+    async def check_all(self):
+        for name in MODELS:
+            try:
+                await self.check(name)
+            except Exception as e:
+                log.warning("install check of %s failed: %s", name, e)
+        self.checked_at = time.time()
+        log.info("installed: %s", {n: self.installed(n) for n in MODELS})
+
+    def installed(self, name):
+        """True / False, or None before the first check."""
+        h = self.have.get(name)
+        return None if h is None else all(h.values())
+
+    def missing(self, name):
+        h = self.have.get(name)
+        return None if h is None else [p for p in self.PARTS if not h[p]]
+
+    def busy(self, name=None):
+        return any(j["state"] in ("queued", "running") for n, j in self.jobs.items() if name in (None, n))
+
+    def chain(self, name, as_req=False, seen=()):
+        """[(model, parts)] in install order: requirements first (recipe + image only), then the model."""
+        out = []
+        for r in MODELS[name].get("requires", []):
+            if r != name and r not in seen:
+                out += [x for x in self.chain(r, True, (*seen, name)) if x[0] not in [y[0] for y in out]]
+        return out + [(name, ("recipe", "image") if as_req else self.PARTS)]
+
+    async def needed(self, name):
+        """True if anything in name's install chain is missing (checks each model now)."""
+        for model, parts in self.chain(name):
+            have = await self.check(model)
+            if not all(have[p] for p in parts):
+                return True
+        return False
+
+    def step_cmd(self, name, part):
+        m = MODELS[name]
+        if part == "recipe":
+            if not m.get("repo"):
+                return None
+            return (f'd={m["dir"]}; [ -d "$d/.git" ] && exit 0; '
+                    '[ -e "$d" ] && [ -n "$(ls -A "$d")" ] && { echo "$d: not empty and not a clone"; exit 1; }; '
+                    'mkdir -p "$(dirname "$d")" && GIT_TERMINAL_PROMPT=0 '
+                    f'git clone -b {m.get("branch", "main")} {m["repo"]} "$d"')
+        if part == "image":
+            return f"cd {m['dir']} && {m['image_update']}" if m.get("image_update") else (
+                f"for i in $(seq 1 20); do docker pull {m['image']} && exit 0; sleep 20; done; exit 1"
+                if m.get("image") else None)
+        if part == "prebuild":
+            return f"cd {m['dir']} && {m['prebuild']}" if m.get("prebuild") else None
+        w = m.get("weights_install") or m.get("weights_update")
+        return f"cd {m['dir']} && {w}" if w else None
+
+    async def run_job(self, name):
+        logf = f"{STATE_DIR}/logs/install-{name}.log"
+        job = self.jobs[name]
+        ok = True
+        try:
+            async with self.lock:
+                job["state"] = "running"
+                for model, parts in self.chain(name):
+                    have = await self.check(model)
+                    todo = [p for p in parts if not have[p]]
+                    if not todo:
+                        job["results"][model] = "present"
+                        continue
+                    if "image" in todo and MODELS[model].get("prebuild"):
+                        todo.insert(todo.index("image") + 1, "prebuild")
+                    for part in todo:
+                        job["step"] = f"{model}: {part}"
+                        cmd = self.step_cmd(model, part)
+                        key = f"{model}: {part}"
+                        if cmd is None:
+                            job["results"][key], ok = "nothing configured to install it", False
+                            break
+                        rc, _ = await host_run(cmd, logf, timeout=12 * 3600)
+                        if rc != 0 and part == "prebuild":   # optional: the first start compiles instead
+                            job["results"][key] = f"failed (exit {rc}): first start compiles instead"
+                            continue
+                        job["results"][key] = "done" if rc == 0 else f"failed (exit {rc})"
+                        if rc != 0:
+                            ok = False
+                            break
+                    if not ok:
+                        break
+            final = "done" if ok else "failed"
+        except Exception as e:
+            final, job["error"] = "failed", str(e)[:500]
+        job["step"] = "re-checking"
+        try:
+            await self.check_all()
+        except Exception as e:
+            log.warning("post-install check failed: %s", e)
+        if final == "done" and not self.installed(name):
+            final, job["error"] = "failed", f"still missing: {', '.join(self.missing(name) or [])}"
+        job["log_tail"] = tail(logf, 15)
+        job["step"], job["finished"], job["state"] = None, time.time(), final
+        log.info("install of %s: %s", name, final)
+
+    def start_job(self, name):
+        self.jobs[name] = {"state": "queued", "step": None, "started": time.time(), "finished": None,
+                           "chain": [n for n, _ in self.chain(name)], "results": {}}
+        asyncio.create_task(self.run_job(name))
+        return self.jobs[name]
+
+    def report(self):
+        return {"checked_at": self.checked_at,
+                "models": {n: {"installed": self.installed(n), "missing": self.missing(n),
+                               "repo": m.get("repo"), "branch": m.get("branch"), "dir": m["dir"],
+                               "requires": m.get("requires", []), "job": self.jobs.get(n)}
+                           for n, m in MODELS.items()}}
+
+
+installer = Installer()
+
+
+async def not_installed(want):
+    """409 response if serving `want` (None = any) would start a model that is not installed."""
+    if want is None:
+        if mgr.state == "ready" or mgr.switch_task is not None:
+            return None
+        want = mgr.any_target()
+    if want == mgr.current or installer.installed(want) is not False:
+        return None
+    try:
+        await installer.check(want)        # installed by hand since the last check?
+    except Exception as e:
+        log.warning("%s", e)
+    if installer.installed(want):
+        return None
+    if installer.busy(want):
+        return err(409, f"{want} not installed: installing, see GET /router/installs", model=want)
+    return err(409, f"{want} not installed: POST /router/install", model=want,
+               missing=installer.missing(want), install={"model": want})
+
+
 def err(status, message, **extra):
     return web.json_response({"error": {"message": message, "type": "router_error", **extra}},
                              status=status)
@@ -763,7 +963,7 @@ async def list_models(request):
              "loaded": mgr.current is not None, "resolves_to": any_target,
              "description": "whichever model is loaded; no switch", **ctx_fields(any_target)}]
     data += [{"id": n, "object": "model", "owned_by": "model-router",
-              "loaded": mgr.current == n, "aliases": m.get("aliases", []),
+              "loaded": mgr.current == n, "installed": installer.installed(n), "aliases": m.get("aliases", []),
               "context_source": (mgr.ctx.get(n) or {}).get("source"), **ctx_fields(n)}
              for n, m in MODELS.items()]
     return web.json_response({"object": "list", "data": data})
@@ -779,6 +979,8 @@ async def router_switch(request):
         want = resolve(body.get("model"))
     except UnknownModel as e:
         return err(404, f"unknown model {e}", available=list(MODELS))
+    if (r := await not_installed(want)) is not None:
+        return r
     try:
         name = await mgr.acquire(want)
     except SwitchFailed as e:
@@ -815,6 +1017,8 @@ async def router_update(request):
         return err(400, "name a specific model to update")
     if updater.busy(name):
         return err(409, f"an update for {name} is already running")
+    if installer.busy(name):
+        return err(409, f"{name} is being installed")
     if mgr.switch_task is not None and name in (mgr.current, mgr.target):
         return err(409, f"{name} is starting/stopping right now; try again when it is ready")
     parts = body.get("parts") or [p for p in ("recipe", "image", "weights")
@@ -824,6 +1028,35 @@ async def router_update(request):
         return err(400, "nothing to update (run a check first, or pass parts)")
     job = updater.start_job(name, parts, bool(body.get("restart")))
     return web.json_response({"model": name, "job": job})
+
+
+async def router_installs(request):
+    if request.query.get("refresh") in ("1", "true") or installer.checked_at is None:
+        await installer.check_all()
+    return web.json_response(installer.report())
+
+
+async def router_install(request):
+    body = await request.json() if request.can_read_body else {}
+    try:
+        name = resolve(body.get("model"))
+    except UnknownModel as e:
+        return err(404, f"unknown model {e}", available=list(MODELS))
+    if name is None:
+        return err(400, "name a specific model to install")
+    if installer.busy(name):
+        return err(409, f"an install of {name} is already running", job=installer.jobs[name])
+    if any(updater.busy(n) for n, _ in installer.chain(name)):
+        return err(409, f"an update of {name} or a model it requires is running")
+    try:
+        needed = await installer.needed(name)
+    except Exception as e:
+        return err(502, str(e))
+    if not needed:
+        return web.json_response({"model": name, "installed": True, "job": None})
+    if installer.busy(name):        # a second request while this one checked
+        return err(409, f"an install of {name} is already running", job=installer.jobs[name])
+    return web.json_response({"model": name, "installed": False, "job": installer.start_job(name)})
 
 
 async def router_restart(request):
@@ -973,6 +1206,8 @@ async def proxy(request):
         return err(404, f"unknown model '{raw}'", available=[*MODELS, "any"])
     # Inference calls (POST) may start a model; GETs like /metrics never do.
     start_if_idle = request.method == "POST"
+    if start_if_idle and (r := await not_installed(want)) is not None:
+        return r
     stream = isinstance(data, dict) and bool(data.get("stream"))
     early = None   # response started before a model was ready (keep-alive while switching)
     try:
@@ -1128,7 +1363,11 @@ async def on_startup(app):
                                 connector=TCPConnector(limit=0), auto_decompress=False)
     await mgr.adopt()
     updater.web = ClientSession()
-    app["update_task"] = asyncio.create_task(updater.periodic())
+
+    async def checks():
+        await installer.check_all()
+        await updater.periodic()
+    app["update_task"] = asyncio.create_task(checks())
 
 
 async def on_cleanup(app):
@@ -1147,6 +1386,8 @@ def main():
     app.router.add_get("/router/updates", router_updates)
     app.router.add_post("/router/update", router_update)
     app.router.add_post("/router/restart", router_restart)
+    app.router.add_get("/router/installs", router_installs)
+    app.router.add_post("/router/install", router_install)
     app.router.add_get("/health", health)
     app.router.add_get("/router/cache", router_cache)
     app.router.add_route("*", "/{tail:.*}", proxy)
