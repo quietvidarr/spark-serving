@@ -11,11 +11,11 @@ services:
     pid: host
     privileged: true
     environment:
-      - HOST_UID=1000
-      - HOST_GID=1000
+      - HOST_UID=${HOST_UID:-1000}       # the user that owns the recipes (id -u / id -g)
+      - HOST_GID=${HOST_GID:-1000}
     volumes:
       - ./models.json:/app/models.json:ro
       - ./ui.html:/app/ui.html:ro
       - ./state:/state
-      # the TensorFold prompt cache's index, read for GET /router/cache (~/recipes/prompt-cache)
-      - ../prompt-cache/store:/prompt-cache:ro
+      # the TensorFold prompt cache's index, read for GET /router/cache (the recipes' PROMPT_CACHE_DIR)
+      - ${PROMPT_CACHE_DIR:-${HOME}/.cache/tensorfold-prompt-cache}:/prompt-cache:ro
